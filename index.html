@@ -1,11 +1,115 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="UTF-8" />
-    <title>Test Page</title>
-  </head>
-  <body>
-    <h1>Good bye from GitHub Pages</h1>
-    <p>If you can see this, the setup is broken.</p>
-  </body>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Simple 3D Room</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: black; }
+    canvas { display: block; }
+    .joystick {
+      position: absolute;
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      border: 2px solid white;
+      background: rgba(255, 255, 255, 0.1);
+    }
+    #moveJoy { left: 20px; bottom: 20px; }
+    #lookJoy { right: 20px; bottom: 20px; }
+  </style>
+</head>
+<body>
+  <div id="moveJoy" class="joystick"></div>
+  <div id="lookJoy" class="joystick"></div>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+  <script>
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({antialias: true});
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
+    scene.add(light);
+
+    // Floor tiles
+    const size = 10;
+    const tileGeo = new THREE.PlaneGeometry(1, 1);
+    for (let x = -size/2; x < size/2; x++) {
+      for (let z = -size/2; z < size/2; z++) {
+        const mat = new THREE.MeshBasicMaterial({ color: (x+z)%2===0 ? 0x000000 : 0xffffff });
+        const tile = new THREE.Mesh(tileGeo, mat);
+        tile.rotation.x = -Math.PI / 2;
+        tile.position.set(x + 0.5, 0, z + 0.5);
+        scene.add(tile);
+      }
+    }
+
+    // Walls and ceiling
+    const wallMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const wallGeo = new THREE.PlaneGeometry(size, 3);
+    const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(size, size), wallMat);
+    ceiling.rotation.x = Math.PI / 2;
+    ceiling.position.y = 3;
+    scene.add(ceiling);
+
+    const makeWall = (rotY, x, z) => {
+      const wall = new THREE.Mesh(wallGeo, wallMat);
+      wall.rotation.y = rotY;
+      wall.position.set(x, 1.5, z);
+      scene.add(wall);
+    };
+    makeWall(0, 0, -size/2); // back wall
+    makeWall(Math.PI, 0, size/2); // front wall
+    makeWall(Math.PI/2, -size/2, 0); // left
+    makeWall(-Math.PI/2, size/2, 0); // right
+
+    // Painting
+    const loader = new THREE.TextureLoader();
+    loader.load("https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/The_Starry_Night.JPG/320px-The_Starry_Night.JPG", tex => {
+      const paint = new THREE.Mesh(new THREE.PlaneGeometry(2, 1.5), new THREE.MeshBasicMaterial({ map: tex }));
+      paint.position.set(0, 1.5, -size/2 + 0.01);
+      scene.add(paint);
+    });
+
+    // Joysticks
+    let move = { x: 0, y: 0 }, look = { x: 0, y: 0 };
+    function setupJoy(el, set) {
+      let dragging = false;
+      el.addEventListener("touchstart", e => { dragging = true; e.preventDefault(); }, { passive: false });
+      el.addEventListener("touchend", e => { dragging = false; set(0, 0); }, { passive: false });
+      el.addEventListener("touchmove", e => {
+        if (!dragging) return;
+        const rect = el.getBoundingClientRect();
+        const t = e.touches[0];
+        const x = ((t.clientX - rect.left) / rect.width - 0.5) * 2;
+        const y = ((t.clientY - rect.top) / rect.height - 0.5) * 2;
+        set(x, y);
+      }, { passive: false });
+    }
+    setupJoy(document.getElementById("moveJoy"), (x, y) => move = { x, y });
+    setupJoy(document.getElementById("lookJoy"), (x, y) => look = { x, y });
+
+    camera.position.set(0, 1.5, 5);
+    let yaw = 0, pitch = 0;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      yaw -= look.x * 0.05;
+      pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch - look.y * 0.05));
+      camera.rotation.set(pitch, yaw, 0);
+
+      const speed = 0.05;
+      const fwd = new THREE.Vector3(Math.sin(yaw), 0, -Math.cos(yaw));
+      const right = new THREE.Vector3(Math.cos(yaw), 0, Math.sin(yaw));
+      camera.position.add(fwd.multiplyScalar(-move.y * speed));
+      camera.position.add(right.multiplyScalar(move.x * speed));
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+  </script>
+</body>
 </html>
